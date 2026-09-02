@@ -80,14 +80,12 @@
         const ctx = canvas.getContext("2d");
         const scoreEl = document.getElementById("score");
         const hpBar = document.getElementById("hp-bar");
+// テスト用の外部画像URLを指定してみる
+const playerImg = new Image();
+playerImg.src = "https://raw.githubusercontent.com/pokeapi/sprites/master/sprites/pokemon/25.png"; // ピカチュウの画像
 
-        // 画像の読み込み（変数の修正済み）
-        const playerImg = new Image();
-        playerImg.src = "player.png";
-
-        const enemyImg = new Image();
-        enemyImg.src = "enemy.png";
-
+const enemyImg = new Image();
+enemyImg.src = "https://raw.githubusercontent.com/pokeapi/sprites/master/sprites/pokemon/133.png"; // イーブイの画像
         let score = 0;
         let gameOver = false;
 
