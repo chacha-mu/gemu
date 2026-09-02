@@ -80,12 +80,11 @@
         const ctx = canvas.getContext("2d");
         const scoreEl = document.getElementById("score");
         const hpBar = document.getElementById("hp-bar");
-// ここを元の記述に戻す
 const playerImg = new Image();
-playerImg.src = "player.png;
+playerImg.src = "player.jpg?v=999"; // png を jpg に変更！
 
 const enemyImg = new Image();
-enemyImg.src = "enemy.png";
+enemyImg.src = "enemy.jpg?v=999";   // png を jpg に変更！
         let score = 0;
         let gameOver = false;
 
