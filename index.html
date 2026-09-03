@@ -2,275 +2,168 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>SUPER SPACE SHOOTER</title>
+    <title>Space Shooter</title>
     <style>
-        body {
-            margin: 0;
-            background-color: #050515;
-            color: #fff;
-            font-family: 'Courier New', Courier, monospace;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            overflow: hidden;
-        }
-
-        #game-container {
-            position: relative;
-            box-shadow: 0 0 30px rgba(0, 229, 255, 0.4);
-            border: 2px solid #00e5ff;
-            border-radius: 8px;
-            overflow: hidden;
-        }
-
-        canvas {
-            background: radial-gradient(circle at center, #0b0c2a 0%, #020208 100%);
-            display: block;
-        }
-
-        #ui {
-            position: absolute;
-            top: 15px;
-            left: 15px;
-            right: 15px;
-            display: flex;
-            justify-content: space-between;
-            font-size: 16px;
-            font-weight: bold;
-            color: #00e5ff;
-            text-shadow: 0 0 8px #00e5ff;
-            pointer-events: none;
-        }
-
-        #hp-bar-container {
-            width: 100px;
-            height: 12px;
-            border: 2px solid #00e5ff;
-            border-radius: 6px;
-            overflow: hidden;
-            background: #222;
-        }
-
-        #hp-bar {
-            width: 100%;
-            height: 100%;
-            background: #00ff66;
-            transition: width 0.2s;
-        }
+        body { margin: 0; background: #000; overflow: hidden; color: #fff; font-family: sans-serif; }
+        canvas { display: block; margin: 0 auto; background: #050510; }
     </style>
 </head>
 <body>
 
-    <div id="game-container">
-        <div id="ui">
-            <div>SCORE: <span id="score">0</span></div>
-            <div style="display: flex; align-items: center; gap: 8px;">
-                HP:
-                <div id="hp-bar-container">
-                    <div id="hp-bar"></div>
-                </div>
-            </div>
-        </div>
-        <canvas id="canvas" width="400" height="600"></canvas>
-    </div>
+<canvas id="gameCanvas" width="480" height="640"></canvas>
 
-    <script>
-        const canvas = document.getElementById("canvas");
-        const ctx = canvas.getContext("2d");
-        const scoreEl = document.getElementById("score");
-        const hpBar = document.getElementById("hp-bar");
-const playerImg = new Image();
-playerImg.src = "player.jpg?v=999"; // png を jpg に変更！
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
 
-const enemyImg = new Image();
-enemyImg.src = "enemey.jpg?v=999";   // png を jpg に変更！
-        let score = 0;
-        let gameOver = false;
+// 画像読み込み
+const playerImg = new Image(); playerImg.src = "player.jpg?v=999";
+const enemyNormalImg = new Image(); enemyNormalImg.src = "enemey.jpg?v=999";
+const enemyHardImg = new Image(); enemyHardImg.src = "yousai.png?v=999";
+const enemyFastImg = new Image(); enemyFastImg.src = "speed.png?v=999";
 
-        const player = {
-            x: canvas.width / 2 - 20,
-            y: canvas.height - 60,
-            width: 40,
-            height: 40,
-            speed: 5,
-            maxHp: 5,
-            hp: 5
-        };
+// ゲーム変数
+let score = 0;
+let currentWave = 1;
+let enemies = [];
+let bullets = [];
+let isGameOver = false;
+let isClear = false;
 
-        const keys = {};
-        const bullets = [];
-        const enemies = [];
-        const particles = [];
-        const stars = [];
+const player = { x: 216, y: 560, w: 48, h: 48, speed: 5 };
 
-        for (let i = 0; i < 50; i++) {
-            stars.push({
-                x: Math.random() * canvas.width,
-                y: Math.random() * canvas.height,
-                size: Math.random() * 2,
-                speed: Math.random() * 2 + 0.5
-            });
-        }
+// キー操作
+const keys = {};
+window.addEventListener("keydown", e => keys[e.code] = true);
+window.addEventListener("keyup", e => keys[e.code] = false);
 
-        document.addEventListener("keydown", (e) => keys[e.key] = true);
-        document.addEventListener("keyup", (e) => keys[e.key] = false);
+// 敵タイプ
+const TYPES = {
+    NORMAL: { img: enemyNormalImg, hp: 1, speed: 2, w: 40, h: 40, score: 100 },
+    HARD:   { img: enemyHardImg,   hp: 5, speed: 1, w: 56, h: 56, score: 300 },
+    FAST:   { img: enemyFastImg,   hp: 1, speed: 4.5, w: 36, h: 36, score: 200 },
+    BOSS:   { img: enemyHardImg,   hp: 25, speed: 0.8, w: 96, h: 96, score: 1000 }
+};
 
-        let canShoot = true;
-        document.addEventListener("keydown", (e) => {
-            if (e.key === " " && canShoot && !gameOver) {
-                bullets.push({
-                    x: player.x + player.width / 2 - 3,
-                    y: player.y,
-                    width: 6,
-                    height: 14
-                });
-                canShoot = false;
-            }
+// ウェーブデータ（1〜5）
+const WAVES = {
+    1: [TYPES.NORMAL, TYPES.NORMAL, TYPES.NORMAL],
+    2: [TYPES.NORMAL, TYPES.NORMAL, TYPES.HARD],
+    3: [TYPES.NORMAL, TYPES.FAST, TYPES.FAST],
+    4: [TYPES.HARD, TYPES.FAST, TYPES.HARD, TYPES.FAST],
+    5: [TYPES.BOSS]
+};
+
+function spawnWave(waveNum) {
+    const list = WAVES[waveNum];
+    if (!list) return;
+    
+    list.forEach((type, index) => {
+        enemies.push({
+            img: type.img,
+            hp: type.hp,
+            speed: type.speed,
+            w: type.w,
+            h: type.h,
+            score: type.score,
+            x: Math.random() * (canvas.width - type.w),
+            y: -60 - (index * 80)
         });
-        document.addEventListener("keyup", (e) => {
-            if (e.key === " ") canShoot = true;
-        });
+    });
+}
 
-        setInterval(() => {
-            if (!gameOver) {
-                enemies.push({
-                    x: Math.random() * (canvas.width - 35),
-                    y: -35,
-                    width: 35,
-                    height: 35,
-                    speed: Math.random() * 2 + 1.5
-                });
-            }
-        }, 800);
+let shootTimer = 0;
 
-        function createExplosion(x, y, color) {
-            for (let i = 0; i < 15; i++) {
-                particles.push({
-                    x: x,
-                    y: y,
-                    vx: (Math.random() - 0.5) * 6,
-                    vy: (Math.random() - 0.5) * 6,
-                    size: Math.random() * 4 + 2,
-                    color: color,
-                    life: 20
-                });
-            }
-        }
+function update() {
+    if (isGameOver || isClear) return;
 
-        function update() {
-            if (gameOver) return;
+    // 移動
+    if (keys["ArrowLeft"] && player.x > 0) player.x -= player.speed;
+    if (keys["ArrowRight"] && player.x < canvas.width - player.w) player.x += player.speed;
+    
+    // 発射 (Spaceキー)
+    if (keys["Space"] && shootTimer % 8 === 0) {
+        bullets.push({ x: player.x + player.w/2 - 3, y: player.y, w: 6, h: 12, speed: 8 });
+    }
+    shootTimer++;
 
-            if ((keys["ArrowLeft"] || keys["a"]) && player.x > 0) player.x -= player.speed;
-            if ((keys["ArrowRight"] || keys["d"]) && player.x < canvas.width - player.width) player.x += player.speed;
+    // 弾更新
+    for (let bi = bullets.length - 1; bi >= 0; bi--) {
+        const b = bullets[bi];
+        b.y -= b.speed;
+        if (b.y < -10) bullets.splice(bi, 1);
+    }
 
-            stars.forEach(star => {
-                star.y += star.speed;
-                if (star.y > canvas.height) star.y = 0;
-            });
+    // 敵更新
+    for (let ei = enemies.length - 1; ei >= 0; ei--) {
+        const e = enemies[ei];
+        e.y += e.speed;
 
-            bullets.forEach((bullet, index) => {
-                bullet.y -= 8;
-                if (bullet.y < 0) bullets.splice(index, 1);
-            });
+        if (e.y > canvas.height) e.y = -e.h;
 
-            particles.forEach((p, index) => {
-                p.x += p.vx;
-                p.y += p.vy;
-                p.life--;
-                if (p.life <= 0) particles.splice(index, 1);
-            });
+        // 弾と敵のヒット判定
+        for (let bi = bullets.length - 1; bi >= 0; bi--) {
+            const b = bullets[bi];
+            if (b.x < e.x + e.w && b.x + b.w > e.x &&
+                b.y < e.y + e.h && b.y + b.h > e.y) {
+                
+                bullets.splice(bi, 1);
+                e.hp--;
 
-            enemies.forEach((enemy, eIndex) => {
-                enemy.y += enemy.speed;
-
-                bullets.forEach((bullet, bIndex) => {
-                    if (
-                        bullet.x < enemy.x + enemy.width &&
-                        bullet.x + bullet.width > enemy.x &&
-                        bullet.y < enemy.y + enemy.height &&
-                        bullet.y + bullet.height > enemy.y
-                    ) {
-                        createExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, "#ffcc00");
-                        enemies.splice(eIndex, 1);
-                        bullets.splice(bIndex, 1);
-                        score += 100;
-                        scoreEl.innerText = score;
-                    }
-                });
-
-                if (
-                    player.x < enemy.x + enemy.width &&
-                    player.x + player.width > enemy.x &&
-                    player.y < enemy.y + enemy.height &&
-                    player.y + player.height > enemy.y
-                ) {
-                    createExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, "#ff0055");
-                    enemies.splice(eIndex, 1);
-                    player.hp--;
-
-                    const hpPercent = (player.hp / player.maxHp) * 100;
-                    hpBar.style.width = Math.max(0, hpPercent) + "%";
-                    if (hpPercent < 30) hpBar.style.background = "#ff0055";
-
-                    if (player.hp <= 0) {
-                        gameOver = true;
-                        alert("GAME OVER! スコア: " + score);
-                        document.location.reload();
-                    }
+                if (e.hp <= 0) {
+                    score += e.score;
+                    enemies.splice(ei, 1);
+                    break;
                 }
-
-                if (enemy.y > canvas.height) enemies.splice(eIndex, 1);
-            });
-        }
-
-        function draw() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            stars.forEach(star => {
-                ctx.fillStyle = "#ffffff";
-                ctx.fillRect(star.x, star.y, star.size, star.size);
-            });
-
-            // 自機の描画
-            if (playerImg.complete && playerImg.naturalWidth !== 0) {
-                ctx.drawImage(playerImg, player.x, player.y, player.width, player.height);
-            } else {
-                ctx.fillStyle = "#00e5ff";
-                ctx.beginPath();
-                ctx.moveTo(player.x + player.width / 2, player.y);
-                ctx.lineTo(player.x, player.y + player.height);
-                ctx.lineTo(player.x + player.width, player.y + player.height);
-                ctx.closePath();
-                ctx.fill();
             }
-
-            // 敵の描画
-            enemies.forEach(enemy => {
-                if (enemyImg.complete && enemyImg.naturalWidth !== 0) {
-                    ctx.drawImage(enemyImg, enemy.x, enemy.y, enemy.width, enemy.height);
-                } else {
-                    ctx.fillStyle = "#ff3366";
-                    ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
-                }
-            });
-
-            ctx.fillStyle = "#ff007f";
-            bullets.forEach(bullet => ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height));
-
-            particles.forEach(p => {
-                ctx.fillStyle = p.color;
-                ctx.fillRect(p.x, p.y, p.size, p.size);
-            });
         }
+    }
 
-        function loop() {
-            update();
-            draw();
-            requestAnimationFrame(loop);
+    // 次のウェーブ
+    if (enemies.length === 0) {
+        if (currentWave < 5) {
+            currentWave++;
+            spawnWave(currentWave);
+        } else {
+            isClear = true;
         }
+    }
+}
 
-        loop();
-    </script>
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // プレイヤー
+    ctx.drawImage(playerImg, player.x, player.y, player.w, player.h);
+
+    // 弾
+    ctx.fillStyle = "#00ffff";
+    bullets.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
+
+    // 敵
+    enemies.forEach(e => ctx.drawImage(e.img, e.x, e.y, e.w, e.h));
+
+    // UI
+    ctx.fillStyle = "#fff";
+    ctx.font = "16px sans-serif";
+    ctx.fillText(`SCORE: ${score}`, 10, 25);
+    ctx.fillText(`WAVE: ${currentWave} / 5`, 10, 50);
+
+    if (isClear) {
+        ctx.fillStyle = "#00ff00";
+        ctx.font = "32px sans-serif";
+        ctx.fillText("ALL CLEAR!!", 150, 320);
+    }
+}
+
+function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+spawnWave(1);
+gameLoop();
+</script>
 </body>
 </html>
