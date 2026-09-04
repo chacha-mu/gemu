@@ -30,19 +30,42 @@ let enemyBullets = [];
 let isGameOver = false;
 let isClear = false;
 
-const player = { x: 216, y: 560, w: 48, h: 48, speed: 5 };
+// プレイヤー設定（HPを3に設定、移動速度を7にアップ）
+const player = { x: 216, y: 560, w: 48, h: 48, speed: 7, hp: 3, maxHp: 3 };
 
-// キー操作
+// キー操作管理
 const keys = {};
-window.addEventListener("keydown", e => keys[e.code] = true);
-window.addEventListener("keyup", e => keys[e.code] = false);
+let spacePressed = false; // 連打検出用フラグ
 
-// 敵タイプ（スピード型のサイズを 48 -> 64 に拡大）
+window.addEventListener("keydown", e => {
+    if (e.code === "Space") {
+        if (!spacePressed) {
+            shootBullet(); // 押した瞬間だけ発射
+            spacePressed = true;
+        }
+    }
+    keys[e.code] = true;
+});
+
+window.addEventListener("keyup", e => {
+    if (e.code === "Space") {
+        spacePressed = false; // 離したらフラグ解除
+    }
+    keys[e.code] = false;
+});
+
+// 弾発射処理（速い弾スピードで爽快感アップ）
+function shootBullet() {
+    if (isGameOver || isClear) return;
+    bullets.push({ x: player.x + player.w/2 - 4, y: player.y, w: 8, h: 16, speed: 12 });
+}
+
+// 敵タイプ（スピード感と爽快感を重視）
 const TYPES = {
-    NORMAL: { img: enemyNormalImg, hp: 2, speed: 1.8, w: 56, h: 56, score: 100, shootRate: 0.01, isBoss: false },
-    HARD:   { img: enemyHardImg,   hp: 8, speed: 0.8, w: 80, h: 80, score: 300, shootRate: 0.02, isBoss: false },
-    FAST:   { img: enemyFastImg,   hp: 1, speed: 3.5, w: 64, h: 64, score: 200, shootRate: 0.005, isBoss: false },
-    BOSS:   { img: enemyHardImg,   hp: 80, speed: 2, w: 140, h: 140, score: 3000, shootRate: 0.08, isBoss: true }
+    NORMAL: { img: enemyNormalImg, hp: 2, speed: 2.5, w: 56, h: 56, score: 100, shootRate: 0.005, isBoss: false },
+    HARD:   { img: enemyHardImg,   hp: 6, speed: 1.2, w: 80, h: 80, score: 300, shootRate: 0.01, isBoss: false },
+    FAST:   { img: enemyFastImg,   hp: 1, speed: 5.5, w: 64, h: 64, score: 200, shootRate: 0.003, isBoss: false },
+    BOSS:   { img: enemyHardImg,   hp: 60, speed: 2, w: 140, h: 140, score: 3000, shootRate: 0.03, isBoss: true }
 };
 
 // ウェーブデータ
@@ -76,28 +99,18 @@ function spawnWave(waveNum) {
     });
 }
 
-let lastShootTime = 0;
-const SHOOT_INTERVAL = 200;
-
 function update() {
     if (isGameOver || isClear) return;
 
-    // プレイヤー移動
+    // プレイヤー移動（スピード感高め）
     if (keys["ArrowLeft"] && player.x > 0) player.x -= player.speed;
     if (keys["ArrowRight"] && player.x < canvas.width - player.w) player.x += player.speed;
-    
-    // 自機ショット
-    const now = Date.now();
-    if (keys["Space"] && now - lastShootTime > SHOOT_INTERVAL) {
-        bullets.push({ x: player.x + player.w/2 - 3, y: player.y, w: 6, h: 14, speed: 8 });
-        lastShootTime = now;
-    }
 
     // 自機弾の移動
     for (let bi = bullets.length - 1; bi >= 0; bi--) {
         const b = bullets[bi];
         b.y -= b.speed;
-        if (b.y < -10) bullets.splice(bi, 1);
+        if (b.y < -20) bullets.splice(bi, 1);
     }
 
     // 敵の移動・攻撃
@@ -105,7 +118,6 @@ function update() {
         const e = enemies[ei];
 
         if (e.isBoss) {
-            // ボス移動制御（確実にy=40で静止させて左右移動に切り替え）
             if (e.y < 40) {
                 e.y += 1.5;
             } else {
@@ -116,21 +128,20 @@ function update() {
                 }
             }
 
-            // ボス攻撃
+            // ボス攻撃（連射頻度を抑えめ調整）
             if (Math.random() < e.shootRate && e.y >= 40) {
                 const centerX = e.x + e.w / 2;
                 const bottomY = e.y + e.h;
-                enemyBullets.push({ x: centerX - 4, y: bottomY, vx: 0, vy: 4, w: 8, h: 12 });
-                enemyBullets.push({ x: centerX - 4, y: bottomY, vx: -1.5, vy: 3.8, w: 8, h: 12 });
-                enemyBullets.push({ x: centerX - 4, y: bottomY, vx: 1.5, vy: 3.8, w: 8, h: 12 });
+                enemyBullets.push({ x: centerX - 4, y: bottomY, vx: 0, vy: 3.5, w: 8, h: 12 });
+                enemyBullets.push({ x: centerX - 4, y: bottomY, vx: -1.2, vy: 3.2, w: 8, h: 12 });
+                enemyBullets.push({ x: centerX - 4, y: bottomY, vx: 1.2, vy: 3.2, w: 8, h: 12 });
             }
         } else {
-            // 通常敵移動
             e.y += e.speed;
             if (e.y > canvas.height) e.y = -e.h;
 
             if (Math.random() < e.shootRate && e.y > 0) {
-                enemyBullets.push({ x: e.x + e.w / 2 - 4, y: e.y + e.h, vx: 0, vy: 4, w: 8, h: 12 });
+                enemyBullets.push({ x: e.x + e.w / 2 - 4, y: e.y + e.h, vx: 0, vy: 3.5, w: 8, h: 12 });
             }
         }
 
@@ -152,7 +163,7 @@ function update() {
         }
     }
 
-    // 敵弾判定
+    // 敵弾処理（自機ダメージ判定）
     for (let ebi = enemyBullets.length - 1; ebi >= 0; ebi--) {
         const eb = enemyBullets[ebi];
         eb.x += eb.vx;
@@ -163,9 +174,16 @@ function update() {
             continue;
         }
 
+        // 被弾処理（HP減少）
         if (eb.x < player.x + player.w && eb.x + eb.w > player.x &&
             eb.y < player.y + player.h && eb.y + eb.h > player.y) {
-            isGameOver = true;
+            
+            enemyBullets.splice(ebi, 1);
+            player.hp--;
+
+            if (player.hp <= 0) {
+                isGameOver = true;
+            }
         }
     }
 
@@ -190,14 +208,18 @@ function draw() {
         return;
     }
 
+    // 自機描画
     ctx.drawImage(playerImg, player.x, player.y, player.w, player.h);
 
+    // 自分の弾（明るいシアン）
     ctx.fillStyle = "#00ffff";
     bullets.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
 
+    // 敵の弾（赤）
     ctx.fillStyle = "#ff0055";
     enemyBullets.forEach(eb => ctx.fillRect(eb.x, eb.y, eb.w, eb.h));
 
+    // 敵描画
     enemies.forEach(e => {
         ctx.drawImage(e.img, e.x, e.y, e.w, e.h);
 
@@ -209,10 +231,18 @@ function draw() {
         }
     });
 
+    // UI描画（スコア、ウェーブ、プレイヤーHP）
     ctx.fillStyle = "#fff";
     ctx.font = "16px sans-serif";
     ctx.fillText(`SCORE: ${score}`, 10, 25);
     ctx.fillText(`WAVE: ${currentWave} / 5`, 10, 50);
+
+    // プレイヤーHPバー
+    ctx.fillText(`HP:`, 10, 75);
+    for (let i = 0; i < player.maxHp; i++) {
+        ctx.fillStyle = i < player.hp ? "#00ff00" : "#444444";
+        ctx.fillRect(40 + (i * 18), 63, 14, 14);
+    }
 
     if (isClear) {
         ctx.fillStyle = "#00ff00";
