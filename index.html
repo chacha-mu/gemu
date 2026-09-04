@@ -13,7 +13,6 @@
 <canvas id="gameCanvas" width="480" height="640"></canvas>
 
 <script>const canvas = document.getElementById("gameCanvas");
-const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
 // 画像読み込み
@@ -38,11 +37,11 @@ const keys = {};
 window.addEventListener("keydown", e => keys[e.code] = true);
 window.addEventListener("keyup", e => keys[e.code] = false);
 
-// 敵タイプ
+// 敵タイプ（スピード型のサイズを 48 -> 64 に拡大）
 const TYPES = {
     NORMAL: { img: enemyNormalImg, hp: 2, speed: 1.8, w: 56, h: 56, score: 100, shootRate: 0.01, isBoss: false },
     HARD:   { img: enemyHardImg,   hp: 8, speed: 0.8, w: 80, h: 80, score: 300, shootRate: 0.02, isBoss: false },
-    FAST:   { img: enemyFastImg,   hp: 1, speed: 4.0, w: 48, h: 48, score: 200, shootRate: 0.005, isBoss: false },
+    FAST:   { img: enemyFastImg,   hp: 1, speed: 3.5, w: 64, h: 64, score: 200, shootRate: 0.005, isBoss: false },
     BOSS:   { img: enemyHardImg,   hp: 80, speed: 2, w: 140, h: 140, score: 3000, shootRate: 0.08, isBoss: true }
 };
 
@@ -70,7 +69,7 @@ function spawnWave(waveNum) {
             score: type.score,
             shootRate: type.shootRate,
             isBoss: type.isBoss,
-            vx: type.speed, // ボスの左右移動用
+            vx: type.speed,
             x: type.isBoss ? (canvas.width / 2 - type.w / 2) : Math.random() * (canvas.width - type.w),
             y: type.isBoss ? -150 : -100 - (index * 100)
         });
@@ -101,22 +100,23 @@ function update() {
         if (b.y < -10) bullets.splice(bi, 1);
     }
 
-    // 敵の移動・攻撃・ヒット判定
+    // 敵の移動・攻撃
     for (let ei = enemies.length - 1; ei >= 0; ei--) {
         const e = enemies[ei];
 
         if (e.isBoss) {
-            // ボス専用の動き：上部に進入して固定＆左右往復
+            // ボス移動制御（確実にy=40で静止させて左右移動に切り替え）
             if (e.y < 40) {
-                e.y += 1;
+                e.y += 1.5;
             } else {
+                e.y = 40;
                 e.x += e.vx;
                 if (e.x <= 10 || e.x + e.w >= canvas.width - 10) {
-                    e.vx *= -1; // 端で折り返し
+                    e.vx *= -1;
                 }
             }
 
-            // ボスの広範囲攻撃（3方向ショット）
+            // ボス攻撃
             if (Math.random() < e.shootRate && e.y >= 40) {
                 const centerX = e.x + e.w / 2;
                 const bottomY = e.y + e.h;
@@ -125,7 +125,7 @@ function update() {
                 enemyBullets.push({ x: centerX - 4, y: bottomY, vx: 1.5, vy: 3.8, w: 8, h: 12 });
             }
         } else {
-            // 通常敵の動き
+            // 通常敵移動
             e.y += e.speed;
             if (e.y > canvas.height) e.y = -e.h;
 
@@ -134,7 +134,7 @@ function update() {
             }
         }
 
-        // 弾と敵のヒット判定
+        // ヒット判定
         for (let bi = bullets.length - 1; bi >= 0; bi--) {
             const b = bullets[bi];
             if (b.x < e.x + e.w && b.x + b.w > e.x &&
@@ -152,7 +152,7 @@ function update() {
         }
     }
 
-    // 敵弾の移動と判定
+    // 敵弾判定
     for (let ebi = enemyBullets.length - 1; ebi >= 0; ebi--) {
         const eb = enemyBullets[ebi];
         eb.x += eb.vx;
@@ -190,22 +190,17 @@ function draw() {
         return;
     }
 
-    // プレイヤー描画
     ctx.drawImage(playerImg, player.x, player.y, player.w, player.h);
 
-    // 自分の弾
     ctx.fillStyle = "#00ffff";
     bullets.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
 
-    // 敵の弾
     ctx.fillStyle = "#ff0055";
     enemyBullets.forEach(eb => ctx.fillRect(eb.x, eb.y, eb.w, eb.h));
 
-    // 敵描画
     enemies.forEach(e => {
         ctx.drawImage(e.img, e.x, e.y, e.w, e.h);
 
-        // ボスのHPバー描画
         if (e.isBoss && e.y >= 40) {
             ctx.fillStyle = "#555";
             ctx.fillRect(e.x, e.y - 15, e.w, 8);
@@ -214,7 +209,6 @@ function draw() {
         }
     });
 
-    // UI描画
     ctx.fillStyle = "#fff";
     ctx.font = "16px sans-serif";
     ctx.fillText(`SCORE: ${score}`, 10, 25);
