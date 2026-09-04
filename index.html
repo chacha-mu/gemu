@@ -31,17 +31,23 @@ let enemyBullets = [];
 let isGameOver = false;
 let isClear = false;
 
-// プレイヤー設定（HPを3に設定、移動速度を7にアップ）
+// プレイヤー＆弾数設定
 const player = { x: 216, y: 560, w: 48, h: 48, speed: 7, hp: 3, maxHp: 3 };
+
+const MAX_AMMO = 10;            // 1マガジンの最大弾数
+let currentAmmo = MAX_AMMO;     // 現在の残弾数
+const RELOAD_TIME = 1500;       // クールタイム（ミリ秒: 1.5秒）
+let isReloading = false;        // リロード中フラグ
+let reloadStartTime = 0;        // リロード開始時刻
 
 // キー操作管理
 const keys = {};
-let spacePressed = false; // 連打検出用フラグ
+let spacePressed = false;
 
 window.addEventListener("keydown", e => {
     if (e.code === "Space") {
         if (!spacePressed) {
-            shootBullet(); // 押した瞬間だけ発射
+            shootBullet();
             spacePressed = true;
         }
     }
@@ -50,18 +56,33 @@ window.addEventListener("keydown", e => {
 
 window.addEventListener("keyup", e => {
     if (e.code === "Space") {
-        spacePressed = false; // 離したらフラグ解除
+        spacePressed = false;
     }
     keys[e.code] = false;
 });
 
-// 弾発射処理（速い弾スピードで爽快感アップ）
+// 弾発射（弾数制限＆クールタイム付き）
 function shootBullet() {
-    if (isGameOver || isClear) return;
-    bullets.push({ x: player.x + player.w/2 - 4, y: player.y, w: 8, h: 16, speed: 12 });
+    if (isGameOver || isClear || isReloading) return;
+
+    if (currentAmmo > 0) {
+        bullets.push({ x: player.x + player.w/2 - 4, y: player.y, w: 8, h: 16, speed: 12 });
+        currentAmmo--;
+
+        // 弾を撃ち切ったらリロード開始
+        if (currentAmmo === 0) {
+            startReload();
+        }
+    }
 }
 
-// 敵タイプ（スピード感と爽快感を重視）
+// リロード開始処理
+function startReload() {
+    isReloading = true;
+    reloadStartTime = Date.now();
+}
+
+// 敵タイプ
 const TYPES = {
     NORMAL: { img: enemyNormalImg, hp: 2, speed: 2.5, w: 56, h: 56, score: 100, shootRate: 0.005, isBoss: false },
     HARD:   { img: enemyHardImg,   hp: 6, speed: 1.2, w: 80, h: 80, score: 300, shootRate: 0.01, isBoss: false },
@@ -103,7 +124,16 @@ function spawnWave(waveNum) {
 function update() {
     if (isGameOver || isClear) return;
 
-    // プレイヤー移動（スピード感高め）
+    // クールタイム（リロード）判定
+    if (isReloading) {
+        const now = Date.now();
+        if (now - reloadStartTime >= RELOAD_TIME) {
+            isReloading = false;
+            currentAmmo = MAX_AMMO; // 弾数回復
+        }
+    }
+
+    // プレイヤー移動
     if (keys["ArrowLeft"] && player.x > 0) player.x -= player.speed;
     if (keys["ArrowRight"] && player.x < canvas.width - player.w) player.x += player.speed;
 
@@ -129,7 +159,6 @@ function update() {
                 }
             }
 
-            // ボス攻撃（連射頻度を抑えめ調整）
             if (Math.random() < e.shootRate && e.y >= 40) {
                 const centerX = e.x + e.w / 2;
                 const bottomY = e.y + e.h;
@@ -146,7 +175,7 @@ function update() {
             }
         }
 
-        // ヒット判定
+        // 被弾判定
         for (let bi = bullets.length - 1; bi >= 0; bi--) {
             const b = bullets[bi];
             if (b.x < e.x + e.w && b.x + b.w > e.x &&
@@ -164,7 +193,7 @@ function update() {
         }
     }
 
-    // 敵弾処理（自機ダメージ判定）
+    // 敵弾判定
     for (let ebi = enemyBullets.length - 1; ebi >= 0; ebi--) {
         const eb = enemyBullets[ebi];
         eb.x += eb.vx;
@@ -175,7 +204,6 @@ function update() {
             continue;
         }
 
-        // 被弾処理（HP減少）
         if (eb.x < player.x + player.w && eb.x + eb.w > player.x &&
             eb.y < player.y + player.h && eb.y + eb.h > player.y) {
             
@@ -212,11 +240,11 @@ function draw() {
     // 自機描画
     ctx.drawImage(playerImg, player.x, player.y, player.w, player.h);
 
-    // 自分の弾（明るいシアン）
+    // 自分の弾
     ctx.fillStyle = "#00ffff";
     bullets.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
 
-    // 敵の弾（赤）
+    // 敵の弾
     ctx.fillStyle = "#ff0055";
     enemyBullets.forEach(eb => ctx.fillRect(eb.x, eb.y, eb.w, eb.h));
 
@@ -232,17 +260,28 @@ function draw() {
         }
     });
 
-    // UI描画（スコア、ウェーブ、プレイヤーHP）
+    // UI描画
     ctx.fillStyle = "#fff";
     ctx.font = "16px sans-serif";
     ctx.fillText(`SCORE: ${score}`, 10, 25);
     ctx.fillText(`WAVE: ${currentWave} / 5`, 10, 50);
 
-    // プレイヤーHPバー
+    // HP表示
     ctx.fillText(`HP:`, 10, 75);
     for (let i = 0; i < player.maxHp; i++) {
         ctx.fillStyle = i < player.hp ? "#00ff00" : "#444444";
         ctx.fillRect(40 + (i * 18), 63, 14, 14);
+    }
+
+    // 残弾数 / リロード表示
+    if (isReloading) {
+        const progress = (Date.now() - reloadStartTime) / RELOAD_TIME;
+        ctx.fillStyle = "#ff0000";
+        ctx.fillText("RELOADING...", 10, 100);
+        ctx.fillRect(120, 88, 100 * progress, 10);
+    } else {
+        ctx.fillStyle = "#00ffff";
+        ctx.fillText(`AMMO: ${currentAmmo} / ${MAX_AMMO}`, 10, 100);
     }
 
     if (isClear) {
