@@ -12,8 +12,7 @@
 
 <canvas id="gameCanvas" width="480" height="640"></canvas>
 
-<script>
-const canvas = document.getElementById("gameCanvas");
+<script>const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
 // 画像読み込み
@@ -27,6 +26,7 @@ let score = 0;
 let currentWave = 1;
 let enemies = [];
 let bullets = [];
+let enemyBullets = []; // 敵の弾
 let isGameOver = false;
 let isClear = false;
 
@@ -37,12 +37,12 @@ const keys = {};
 window.addEventListener("keydown", e => keys[e.code] = true);
 window.addEventListener("keyup", e => keys[e.code] = false);
 
-// 敵タイプ
+// 敵タイプ（サイズを大きく調整）
 const TYPES = {
-    NORMAL: { img: enemyNormalImg, hp: 1, speed: 2, w: 40, h: 40, score: 100 },
-    HARD:   { img: enemyHardImg,   hp: 5, speed: 1, w: 56, h: 56, score: 300 },
-    FAST:   { img: enemyFastImg,   hp: 1, speed: 4.5, w: 36, h: 36, score: 200 },
-    BOSS:   { img: enemyHardImg,   hp: 25, speed: 0.8, w: 96, h: 96, score: 1000 }
+    NORMAL: { img: enemyNormalImg, hp: 2, speed: 1.8, w: 56, h: 56, score: 100, shootRate: 0.01 },
+    HARD:   { img: enemyHardImg,   hp: 8, speed: 0.8, w: 80, h: 80, score: 300, shootRate: 0.02 },
+    FAST:   { img: enemyFastImg,   hp: 1, speed: 4.0, w: 48, h: 48, score: 200, shootRate: 0.005 },
+    BOSS:   { img: enemyHardImg,   hp: 35, speed: 0.6, w: 120, h: 120, score: 1000, shootRate: 0.05 }
 };
 
 // ウェーブデータ（1〜5）
@@ -66,42 +66,56 @@ function spawnWave(waveNum) {
             w: type.w,
             h: type.h,
             score: type.score,
+            shootRate: type.shootRate,
             x: Math.random() * (canvas.width - type.w),
-            y: -60 - (index * 80)
+            y: -100 - (index * 100)
         });
     });
 }
 
-let shootTimer = 0;
+let lastShootTime = 0;
+const SHOOT_INTERVAL = 250; // プレイヤーの連射間隔（ミリ秒）: 値を大きくすると難しくなります
 
 function update() {
     if (isGameOver || isClear) return;
 
-    // 移動
+    // プレイヤー移動
     if (keys["ArrowLeft"] && player.x > 0) player.x -= player.speed;
     if (keys["ArrowRight"] && player.x < canvas.width - player.w) player.x += player.speed;
     
-    // 発射 (Spaceキー)
-    if (keys["Space"] && shootTimer % 8 === 0) {
-        bullets.push({ x: player.x + player.w/2 - 3, y: player.y, w: 6, h: 12, speed: 8 });
+    // 自機ショット（連射制限付き）
+    const now = Date.now();
+    if (keys["Space"] && now - lastShootTime > SHOOT_INTERVAL) {
+        bullets.push({ x: player.x + player.w/2 - 3, y: player.y, w: 6, h: 14, speed: 8 });
+        lastShootTime = now;
     }
-    shootTimer++;
 
-    // 弾更新
+    // 自機弾の移動
     for (let bi = bullets.length - 1; bi >= 0; bi--) {
         const b = bullets[bi];
         b.y -= b.speed;
         if (b.y < -10) bullets.splice(bi, 1);
     }
 
-    // 敵更新
+    // 敵の移動・攻撃・ヒット判定
     for (let ei = enemies.length - 1; ei >= 0; ei--) {
         const e = enemies[ei];
         e.y += e.speed;
 
         if (e.y > canvas.height) e.y = -e.h;
 
-        // 弾と敵のヒット判定
+        // 敵の攻撃確率判定
+        if (Math.random() < e.shootRate && e.y > 0) {
+            enemyBullets.push({
+                x: e.x + e.w / 2 - 4,
+                y: e.y + e.h,
+                w: 8,
+                h: 12,
+                speed: 4
+            });
+        }
+
+        // プレイヤーの弾との当たり判定
         for (let bi = bullets.length - 1; bi >= 0; bi--) {
             const b = bullets[bi];
             if (b.x < e.x + e.w && b.x + b.w > e.x &&
@@ -119,7 +133,25 @@ function update() {
         }
     }
 
-    // 次のウェーブ
+    // 敵弾の移動と自機への当たり判定
+    for (let ebi = enemyBullets.length - 1; ebi >= 0; ebi--) {
+        const eb = enemyBullets[ebi];
+        eb.y += eb.speed;
+
+        // 画面外処理
+        if (eb.y > canvas.height) {
+            enemyBullets.splice(ebi, 1);
+            continue;
+        }
+
+        // 自機とのヒット判定（ゲームオーバー）
+        if (eb.x < player.x + player.w && eb.x + eb.w > player.x &&
+            eb.y < player.y + player.h && eb.y + eb.h > player.y) {
+            isGameOver = true;
+        }
+    }
+
+    // ウェーブ進行判定
     if (enemies.length === 0) {
         if (currentWave < 5) {
             currentWave++;
@@ -133,17 +165,28 @@ function update() {
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // プレイヤー
+    if (isGameOver) {
+        ctx.fillStyle = "#ff0000";
+        ctx.font = "36px sans-serif";
+        ctx.fillText("GAME OVER", 130, 320);
+        return;
+    }
+
+    // プレイヤー描画
     ctx.drawImage(playerImg, player.x, player.y, player.w, player.h);
 
-    // 弾
+    // 自分の弾（水色）
     ctx.fillStyle = "#00ffff";
     bullets.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
 
-    // 敵
+    // 敵の弾（赤色）
+    ctx.fillStyle = "#ff0055";
+    enemyBullets.forEach(eb => ctx.fillRect(eb.x, eb.y, eb.w, eb.h));
+
+    // 敵描画
     enemies.forEach(e => ctx.drawImage(e.img, e.x, e.y, e.w, e.h));
 
-    // UI
+    // UI描画
     ctx.fillStyle = "#fff";
     ctx.font = "16px sans-serif";
     ctx.fillText(`SCORE: ${score}`, 10, 25);
@@ -151,8 +194,8 @@ function draw() {
 
     if (isClear) {
         ctx.fillStyle = "#00ff00";
-        ctx.font = "32px sans-serif";
-        ctx.fillText("ALL CLEAR!!", 150, 320);
+        ctx.font = "36px sans-serif";
+        ctx.fillText("ALL CLEAR!!", 140, 320);
     }
 }
 
